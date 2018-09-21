@@ -19,6 +19,7 @@
 import os
 import time
 from collections import namedtuple
+from logging import WARN
 
 import numpy as np
 import tensorflow as tf
@@ -83,6 +84,7 @@ tf.app.flags.DEFINE_boolean('restore_best_model', False,
 
 # Debugging. See https://www.tensorflow.org/programmers_guide/debugger
 tf.app.flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
+tf.app.flags.DEFINE_boolean('no_info_log_in_training', False, "no info log in training")
 
 
 def calc_running_avg_loss(loss, running_avg_loss, summary_writer, step, decay=0.99):
@@ -200,24 +202,27 @@ def run_training(model, batcher, sess_context_manager, summary_writer):
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
         train_step = 0
+        old_verbosity = tf.logging.get_verbosity()
+        if FLAGS.no_info_log_in_training:
+            tf.logging.set_verbosity(WARN)
         for _ in tqdm(range(FLAGS.max_iterations)):  # repeats until interrupted
             batch = batcher.next_batch()
 
-            tf.logging.debug('running training step %d...', train_step)
+            tf.logging.info('running training step %d...', train_step)
             t0 = time.time()
             results = model.run_train_step(sess, batch)
             t1 = time.time()
-            tf.logging.debug('seconds for training step: %.3f', t1 - t0)
+            tf.logging.info('seconds for training step: %.3f', t1 - t0)
 
             loss = results['loss']
-            tf.logging.debug('loss: %f', loss)  # print the loss to screen
+            tf.logging.info('loss: %f', loss)  # print the loss to screen
 
             if not np.isfinite(loss):
                 raise Exception("Loss is not finite. Stopping.")
 
             if FLAGS.coverage:
                 coverage_loss = results['coverage_loss']
-                tf.logging.debug("coverage_loss: %f", coverage_loss)  # print the coverage loss to screen
+                tf.logging.info("coverage_loss: %f", coverage_loss)  # print the coverage loss to screen
 
             # get the summaries and iteration number so we can write summaries to tensorboard
             summaries = results['summaries']  # we will write these summaries to tensorboard using summary_writer
@@ -226,6 +231,7 @@ def run_training(model, batcher, sess_context_manager, summary_writer):
             summary_writer.add_summary(summaries, train_step)  # write the summaries
             if train_step % 100 == 0:  # flush the summary writer every so often
                 summary_writer.flush()
+        tf.logging.set_verbosity(old_verbosity)
 
 
 def run_eval(model, batcher, vocab):

@@ -7,4 +7,5 @@ CUDA_VISIBLE_DEVICES=$CUDA python run_summarization.py --mode=train \
                                                        --vocab_path=$DATA/vocab \
                                                        --log_root=./log \
                                                        --exp_name=$EXP_NAME \
+                                                       --no_info_log_in_training=True \
                                                        $@
