@@ -19,7 +19,7 @@
 import os
 import time
 from collections import namedtuple
-from logging import WARN
+from logging import ERROR
 
 import numpy as np
 import tensorflow as tf
@@ -84,7 +84,7 @@ tf.app.flags.DEFINE_boolean('restore_best_model', False,
 
 # Debugging. See https://www.tensorflow.org/programmers_guide/debugger
 tf.app.flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
-tf.app.flags.DEFINE_boolean('no_info_log_in_training', False, "no info log in training")
+tf.app.flags.DEFINE_boolean('no_log_during_training', False, "no log during training")
 
 
 def calc_running_avg_loss(loss, running_avg_loss, summary_writer, step, decay=0.99):
@@ -203,8 +203,8 @@ def run_training(model, batcher, sess_context_manager, summary_writer):
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
         train_step = 0
         old_verbosity = tf.logging.get_verbosity()
-        if FLAGS.no_info_log_in_training:
-            tf.logging.set_verbosity(WARN)
+        if FLAGS.no_log_during_training:
+            tf.logging.set_verbosity(ERROR)
         for _ in tqdm(range(FLAGS.max_iterations)):  # repeats until interrupted
             batch = batcher.next_batch()
 
