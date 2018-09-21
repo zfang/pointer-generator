@@ -63,6 +63,7 @@ tf.app.flags.DEFINE_float('adagrad_init_acc', 0.1, 'initial accumulator value fo
 tf.app.flags.DEFINE_float('rand_unif_init_mag', 0.02, 'magnitude for lstm cells random uniform inititalization')
 tf.app.flags.DEFINE_float('trunc_norm_init_std', 1e-4, 'std of trunc norm init, used for initializing everything else')
 tf.app.flags.DEFINE_float('max_grad_norm', 2.0, 'for gradient clipping')
+tf.app.flags.DEFINE_float('max_iterations', 230000, 'max iterations')
 
 # Pointer-generator or baseline model
 tf.app.flags.DEFINE_boolean('pointer_gen', True, 'If True, use pointer-generator model. If False, use baseline model.')
@@ -184,21 +185,21 @@ def setup_training(model, batcher):
     sess_context_manager = sv.prepare_or_wait_for_session(config=util.get_config())
     tf.logging.info("Created session.")
     try:
-        run_training(model, batcher, sess_context_manager, sv,
-                     summary_writer)  # this is an infinite loop until interrupted
+        run_training(model, batcher, sess_context_manager, summary_writer)  # this is an infinite loop until interrupted
     except KeyboardInterrupt:
         tf.logging.info("Caught keyboard interrupt on worker. Stopping supervisor...")
         sv.stop()
 
 
-def run_training(model, batcher, sess_context_manager, sv, summary_writer):
+def run_training(model, batcher, sess_context_manager, summary_writer):
     """Repeatedly runs training iterations, logging loss to screen and writing summaries"""
     tf.logging.info("starting run_training")
     with sess_context_manager as sess:
         if FLAGS.debug:  # start the tensorflow debugger
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
-        while True:  # repeats until interrupted
+        train_step = 0
+        while train_step < FLAGS.max_iterations:  # repeats until interrupted
             batch = batcher.next_batch()
 
             tf.logging.info('running training step...')
