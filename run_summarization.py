@@ -23,6 +23,7 @@ from collections import namedtuple
 import numpy as np
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
+from tqdm import tqdm
 
 import util
 from batcher import Batcher
@@ -63,7 +64,7 @@ tf.app.flags.DEFINE_float('adagrad_init_acc', 0.1, 'initial accumulator value fo
 tf.app.flags.DEFINE_float('rand_unif_init_mag', 0.02, 'magnitude for lstm cells random uniform inititalization')
 tf.app.flags.DEFINE_float('trunc_norm_init_std', 1e-4, 'std of trunc norm init, used for initializing everything else')
 tf.app.flags.DEFINE_float('max_grad_norm', 2.0, 'for gradient clipping')
-tf.app.flags.DEFINE_float('max_iterations', 230000, 'max iterations')
+tf.app.flags.DEFINE_integer('max_iterations', 230000, 'max iterations')
 
 # Pointer-generator or baseline model
 tf.app.flags.DEFINE_boolean('pointer_gen', True, 'If True, use pointer-generator model. If False, use baseline model.')
@@ -199,24 +200,24 @@ def run_training(model, batcher, sess_context_manager, summary_writer):
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
         train_step = 0
-        while train_step < FLAGS.max_iterations:  # repeats until interrupted
+        for _ in tqdm(range(FLAGS.max_iterations)):  # repeats until interrupted
             batch = batcher.next_batch()
 
-            tf.logging.info('running training step...')
+            tf.logging.debug('running training step %d...', train_step)
             t0 = time.time()
             results = model.run_train_step(sess, batch)
             t1 = time.time()
-            tf.logging.info('seconds for training step: %.3f', t1 - t0)
+            tf.logging.debug('seconds for training step: %.3f', t1 - t0)
 
             loss = results['loss']
-            tf.logging.info('loss: %f', loss)  # print the loss to screen
+            tf.logging.debug('loss: %f', loss)  # print the loss to screen
 
             if not np.isfinite(loss):
                 raise Exception("Loss is not finite. Stopping.")
 
             if FLAGS.coverage:
                 coverage_loss = results['coverage_loss']
-                tf.logging.info("coverage_loss: %f", coverage_loss)  # print the coverage loss to screen
+                tf.logging.debug("coverage_loss: %f", coverage_loss)  # print the coverage loss to screen
 
             # get the summaries and iteration number so we can write summaries to tensorboard
             summaries = results['summaries']  # we will write these summaries to tensorboard using summary_writer
