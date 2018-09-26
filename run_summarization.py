@@ -32,6 +32,8 @@ from data import Vocab
 from decode import BeamSearchDecoder
 from model import SummarizationModel
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 FLAGS = tf.app.flags.FLAGS
 
 # Where to find data
