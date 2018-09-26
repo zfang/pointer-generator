@@ -203,9 +203,11 @@ def run_training(model, batcher, sess_context_manager, summary_writer):
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
         train_step = 0
         old_verbosity = tf.logging.get_verbosity()
+        iterable = range(FLAGS.max_iterations)
         if FLAGS.no_log_during_training:
             tf.logging.set_verbosity(ERROR)
-        for _ in tqdm(range(FLAGS.max_iterations)):  # repeats until interrupted
+            iterable = tqdm(iterable, dynamic_ncols=True)
+        for _ in iterable:  # repeats until interrupted
             batch = batcher.next_batch()
 
             tf.logging.info('running training step %d...', train_step)
