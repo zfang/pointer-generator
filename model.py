@@ -17,6 +17,7 @@
 """This file contains code to build and run the tensorflow graph for the sequence-to-sequence model"""
 
 import os
+import sys
 import time
 
 import numpy as np
@@ -149,10 +150,17 @@ class SummarizationModel(object):
 
         prev_coverage = self.prev_coverage if hps.mode == "decode" and hps.coverage else None  # In decode mode, we run attention_decoder one step at a time and so need to pass in the previous step's coverage vector each time
 
-        outputs, out_state, attn_dists, p_gens, coverage = attention_decoder(inputs, self._dec_in_state,
-                                                                             self._enc_states, self._enc_padding_mask,
-                                                                             cell, initial_state_attention=(
-            hps.mode == "decode"), pointer_gen=hps.pointer_gen, use_coverage=hps.coverage, prev_coverage=prev_coverage)
+        outputs, out_state, attn_dists, p_gens, coverage = attention_decoder(inputs,
+                                                                             self._dec_in_state,
+                                                                             self._enc_states,
+                                                                             self._enc_padding_mask,
+                                                                             cell,
+                                                                             initial_state_attention=(
+                                                                                 hps.mode == "decode"
+                                                                             ),
+                                                                             pointer_gen=hps.pointer_gen,
+                                                                             use_coverage=hps.coverage,
+                                                                             prev_coverage=prev_coverage)
 
         return outputs, out_state, attn_dists, p_gens, coverage
 
@@ -279,7 +287,8 @@ class SummarizationModel(object):
                             indices = tf.stack((batch_nums, targets), axis=1)  # shape (batch_size, 2)
                             gold_probs = tf.gather_nd(dist,
                                                       indices)  # shape (batch_size). prob of correct words on this step
-                            losses = -tf.log(gold_probs)
+                            clipped_probs = tf.clip_by_value(gold_probs, sys.float_info.epsilon, 1.)
+                            losses = -tf.log(clipped_probs)
                             loss_per_step.append(losses)
 
                         # Apply dec_padding_mask and get loss
