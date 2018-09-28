@@ -81,7 +81,7 @@ class BeamSearchDecoder(object):
         t0 = time.time()
         counter = 0
         tf.logging.info("Start decoding...")
-        for _ in tqdm(iter(int, 1)):
+        while True:
             batch = self._batcher.next_batch()  # 1 example repeated across batch
             if batch is None:  # finished decoding dataset in single_pass mode
                 assert FLAGS.single_pass, "Dataset exhausted, but we are not in single_pass mode"
@@ -169,7 +169,7 @@ class BeamSearchDecoder(object):
             for idx, sent in enumerate(decoded_sents):
                 f.write(sent) if idx == len(decoded_sents) - 1 else f.write(sent + "\n")
 
-        tf.logging.debug("Wrote example %i to file" % ex_index)
+        tf.logging.info("Wrote example %i to file" % ex_index)
 
     def write_for_attnvis(self, article, abstract, decoded_words, attn_dists, p_gens):
         """Write some data to json file, which can be read into the in-browser attention visualizer tool:
