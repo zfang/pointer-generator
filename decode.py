@@ -23,6 +23,7 @@ import time
 
 import pyrouge
 import tensorflow as tf
+from tqdm import tqdm
 
 import beam_search
 import data
@@ -32,6 +33,7 @@ FLAGS = tf.app.flags.FLAGS
 
 SECS_UNTIL_NEW_CKPT = 60  # max number of seconds before loading new checkpoint
 
+_ROUGE_PATH = os.environ.get('ROUGE')
 
 class BeamSearchDecoder(object):
     """Beam search decoder."""
@@ -78,7 +80,8 @@ class BeamSearchDecoder(object):
         """Decode examples until data is exhausted (if FLAGS.single_pass) and return, or decode indefinitely, loading latest checkpoint at regular intervals"""
         t0 = time.time()
         counter = 0
-        while True:
+        tf.logging.info("Start decoding...")
+        for _ in tqdm(iter(int, 1)):
             batch = self._batcher.next_batch()  # 1 example repeated across batch
             if batch is None:  # finished decoding dataset in single_pass mode
                 assert FLAGS.single_pass, "Dataset exhausted, but we are not in single_pass mode"
@@ -166,7 +169,7 @@ class BeamSearchDecoder(object):
             for idx, sent in enumerate(decoded_sents):
                 f.write(sent) if idx == len(decoded_sents) - 1 else f.write(sent + "\n")
 
-        tf.logging.info("Wrote example %i to file" % ex_index)
+        tf.logging.debug("Wrote example %i to file" % ex_index)
 
     def write_for_attnvis(self, article, abstract, decoded_words, attn_dists, p_gens):
         """Write some data to json file, which can be read into the in-browser attention visualizer tool:
@@ -213,7 +216,7 @@ def make_html_safe(s):
 
 def rouge_eval(ref_dir, dec_dir):
     """Evaluate the files in ref_dir and dec_dir with pyrouge, returning results_dict"""
-    r = pyrouge.Rouge155()
+    r = pyrouge.Rouge155(rouge_dir=_ROUGE_PATH)
     r.model_filename_pattern = '#ID#_reference.txt'
     r.system_filename_pattern = '(\d+)_decoded.txt'
     r.model_dir = ref_dir

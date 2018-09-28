@@ -375,6 +375,6 @@ class Batcher(object):
                 tf.logging.error('Failed to get article or abstract from example')
                 continue
             if len(article_text) == 0:  # See https://github.com/abisee/pointer-generator/issues/1
-                tf.logging.warning('Found an example with empty article text. Skipping it.')
+                tf.logging.debug('Found an example with empty article text. Skipping it.')
             else:
                 yield (article_text, abstract_text)

@@ -22,11 +22,14 @@ import time
 
 import numpy as np
 import tensorflow as tf
+from bilm import BidirectionalLanguageModel, weight_layers
 from tensorflow.contrib.tensorboard.plugins import projector
 
 from attention_decoder import attention_decoder
 
 FLAGS = tf.app.flags.FLAGS
+
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
 class SummarizationModel(object):
@@ -195,7 +198,7 @@ class SummarizationModel(object):
             batch_nums = tf.tile(batch_nums, [1, attn_len])  # shape (batch_size, attn_len)
             indices = tf.stack((batch_nums, self._enc_batch_extend_vocab), axis=2)  # shape (batch_size, enc_t, 2)
             shape = [self._hps.batch_size, extended_vsize]
-            attn_dists_projected = [tf.scatter_nd(indices, copy_dist, shape) for copy_dist in
+            attn_dists_projected = [tf.scatter_nd(indices[:, :tf.shape(copy_dist)[-1], :], copy_dist, shape) for copy_dist in
                                     attn_dists]  # list length max_dec_steps (batch_size, extended_vsize)
 
             # Add the vocab distributions and the copy distributions together to get the final distributions
@@ -220,10 +223,23 @@ class SummarizationModel(object):
         embedding.metadata_path = vocab_metadata_path
         projector.visualize_embeddings(summary_writer, config)
 
+    def _get_elmo_embedding(self, name, batch):
+        return weight_layers(name, self._elmo_bilm(batch))['weighted_op']
+
     def _add_seq2seq(self):
         """Add the whole sequence-to-sequence model to the graph."""
         hps = self._hps
         vsize = self._vocab.size()  # size of the vocabulary
+
+        if hps.elmo:
+            self._elmo_bilm = _get_elmo_bilm()
+
+        emb_enc_inputs = None
+        # Add elmo embedding
+        if hps.elmo == 'embedding':
+            assert hps.emb_dim == 128
+            emb_enc_inputs = self._get_elmo_embedding('elmo_embedding_for_encoder',
+                                                      self._enc_batch)  # tensor with shape (batch_size, max_enc_steps, emb_size)
 
         with tf.variable_scope('seq2seq'):
             # Some initializers
@@ -235,9 +251,9 @@ class SummarizationModel(object):
             with tf.variable_scope('embedding'):
                 embedding = tf.get_variable('embedding', [vsize, hps.emb_dim], dtype=tf.float32,
                                             initializer=self.trunc_norm_init)
-                if hps.mode == "train": self._add_emb_vis(embedding)  # add to tensorboard
-                emb_enc_inputs = tf.nn.embedding_lookup(embedding,
-                                                        self._enc_batch)  # tensor with shape (batch_size, max_enc_steps, emb_size)
+                if emb_enc_inputs is None:
+                    emb_enc_inputs = tf.nn.embedding_lookup(embedding,
+                                                            self._enc_batch)  # tensor with shape (batch_size, max_enc_steps, emb_size)
                 emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch,
                                                                                            axis=1)]  # list length max_dec_steps containing shape (batch_size, emb_size)
 
@@ -256,7 +272,6 @@ class SummarizationModel(object):
             # Add the output projection to obtain the vocabulary distribution
             with tf.variable_scope('output_projection'):
                 w = tf.get_variable('w', [hps.hidden_dim, vsize], dtype=tf.float32, initializer=self.trunc_norm_init)
-                w_t = tf.transpose(w)
                 v = tf.get_variable('v', [vsize], dtype=tf.float32, initializer=self.trunc_norm_init)
                 vocab_scores = []  # vocab_scores is the vocabulary distribution before applying softmax. Each entry on the list corresponds to one decoder step
                 for i, output in enumerate(decoder_outputs):
@@ -512,3 +527,12 @@ def _coverage_loss(attn_dists, padding_mask):
         coverage += a  # update the coverage vector
     coverage_loss = _mask_and_avg(covlosses, padding_mask)
     return coverage_loss
+
+
+def _get_elmo_bilm():
+    return BidirectionalLanguageModel(
+        os.path.join(DIR_PATH, 'elmo_2x1024_128_2048cnn_1xhighway_options.json'),
+        os.path.join(DIR_PATH, 'elmo_2x1024_128_2048cnn_1xhighway_weights.hdf5'),
+        use_character_inputs=False,
+        embedding_weight_file=os.path.join(DIR_PATH, 'elmo_token_embeddings.hdf5')
+    )

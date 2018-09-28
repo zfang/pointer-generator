@@ -86,8 +86,9 @@ tf.app.flags.DEFINE_boolean('restore_best_model', False,
 
 # Debugging. See https://www.tensorflow.org/programmers_guide/debugger
 tf.app.flags.DEFINE_boolean('debug', False, "Run in tensorflow's debug mode (watches for NaN/inf values)")
-tf.app.flags.DEFINE_boolean('no_log_during_training', False, "no log during training")
 
+tf.app.flags.DEFINE_boolean('no_log_during_run', False, "no log during run")
+tf.app.flags.DEFINE_string('elmo', '', 'ELMo BiLM integration (\'embedding\', \'modulated_attention\', \'multihead_attention\')')
 
 def calc_running_avg_loss(loss, running_avg_loss, summary_writer, step, decay=0.99):
     """Calculate the running average loss via exponential decay.
@@ -206,7 +207,7 @@ def run_training(model, batcher, sess_context_manager, summary_writer):
         train_step = 0
         old_verbosity = tf.logging.get_verbosity()
         iterable = range(FLAGS.max_iterations)
-        if FLAGS.no_log_during_training:
+        if FLAGS.no_log_during_run:
             tf.logging.set_verbosity(ERROR)
             iterable = tqdm(iterable, dynamic_ncols=True)
         for _ in iterable:  # repeats until interrupted
@@ -238,7 +239,7 @@ def run_training(model, batcher, sess_context_manager, summary_writer):
         tf.logging.set_verbosity(old_verbosity)
 
 
-def run_eval(model, batcher, vocab):
+def run_eval(model, batcher):
     """Repeatedly runs eval iterations, logging to screen and writing summaries. Saves the model with the best loss seen so far."""
     model.build_graph()  # build the graph
     saver = tf.train.Saver(max_to_keep=3)  # we will keep 3 best checkpoints at a time
@@ -249,7 +250,12 @@ def run_eval(model, batcher, vocab):
     running_avg_loss = 0  # the eval job keeps a smoother, running average loss to tell it when to implement early stopping
     best_loss = None  # will hold the best loss achieved so far
 
-    while True:
+    old_verbosity = tf.logging.get_verbosity()
+    iterable = range(FLAGS.max_iterations)
+    if FLAGS.no_log_during_run:
+        tf.logging.set_verbosity(ERROR)
+        iterable = tqdm(iterable, dynamic_ncols=True)
+    for _ in iterable:  # repeats until interrupted
         _ = util.load_ckpt(saver, sess)  # load a new checkpoint
         batch = batcher.next_batch()  # get the next batch
 
@@ -285,6 +291,7 @@ def run_eval(model, batcher, vocab):
         # flush the summary writer every so often
         if train_step % 100 == 0:
             summary_writer.flush()
+    tf.logging.set_verbosity(old_verbosity)
 
 
 def main(unused_argv):
@@ -317,7 +324,7 @@ def main(unused_argv):
     # Make a namedtuple hps, containing the values of the hyperparameters that the model needs
     hparam_list = ['mode', 'lr', 'adagrad_init_acc', 'rand_unif_init_mag', 'trunc_norm_init_std', 'max_grad_norm',
                    'hidden_dim', 'emb_dim', 'batch_size', 'max_dec_steps', 'max_enc_steps', 'coverage', 'cov_loss_wt',
-                   'pointer_gen']
+                   'pointer_gen', 'elmo']
     hps_dict = {}
     for key, val in FLAGS.__flags.items():  # for each flag
         if key in hparam_list:  # if it's in the list
@@ -335,9 +342,8 @@ def main(unused_argv):
         setup_training(model, batcher)
     elif hps.mode == 'eval':
         model = SummarizationModel(hps, vocab)
-        run_eval(model, batcher, vocab)
+        run_eval(model, batcher)
     elif hps.mode == 'decode':
-        decode_model_hps = hps  # This will be the hyperparameters for the decoder model
         decode_model_hps = hps._replace(
             max_dec_steps=1)  # The model is configured with max_dec_steps=1 because we only ever run one step of the decoder at a time (to do beam search). Note that the batcher is initialized with max_dec_steps equal to e.g. 100 because the batches need to contain the full summaries
         model = SummarizationModel(decode_model_hps, vocab)

@@ -25,6 +25,9 @@ from tensorflow.python.ops import variable_scope
 
 # Note: this function is based on tf.contrib.legacy_seq2seq_attention_decoder, which is now outdated.
 # In the future, it would make more sense to write variants on the attention mechanism using the new seq2seq library for tensorflow 1.0: https://www.tensorflow.org/api_guides/python/contrib.seq2seq#Attention
+from tqdm import tqdm
+
+
 def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding_mask, cell,
                       initial_state_attention=False, pointer_gen=True, use_coverage=False, prev_coverage=None):
     """
@@ -103,7 +106,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
                 def masked_attention(e):
                     """Take softmax of e then apply enc_padding_mask and re-normalize"""
                     attn_dist = nn_ops.softmax(e)  # take softmax. shape (batch_size, attn_length)
-                    attn_dist *= enc_padding_mask  # apply mask
+                    attn_dist *= enc_padding_mask[:, :tf.shape(attn_dist)[-1]]  # apply mask
                     masked_sums = tf.reduce_sum(attn_dist, axis=1)  # shape (batch_size)
                     return attn_dist / tf.reshape(masked_sums, [-1, 1])  # re-normalize
 
@@ -151,8 +154,9 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
             # Re-calculate the context vector from the previous step so that we can pass it through a linear layer with this step's input to get a modified version of the input
             context_vector, _, coverage = attention(initial_state,
                                                     coverage)  # in decode mode, this is what updates the coverage vector
-        for i, inp in enumerate(decoder_inputs):
-            tf.logging.info("Adding attention_decoder timestep %i of %i", i, len(decoder_inputs))
+        tf.logging.info("Adding attention_decoder")
+        for i in tqdm(range(len(decoder_inputs))):
+            inp = decoder_inputs[i]
             if i > 0:
                 variable_scope.get_variable_scope().reuse_variables()
 
