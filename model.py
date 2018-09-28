@@ -224,7 +224,7 @@ class SummarizationModel(object):
         projector.visualize_embeddings(summary_writer, config)
 
     def _get_elmo_embedding(self, name, batch):
-        return weight_layers(name, self._elmo_bilm(batch))['weighted_op']
+        return weight_layers(name, self._elmo_bilm(batch), use_top_only=True)['weighted_op']
 
     def _add_seq2seq(self):
         """Add the whole sequence-to-sequence model to the graph."""
